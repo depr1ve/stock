@@ -35,15 +35,19 @@ FALLBACK_CONFIG = {
     "LLM_MODEL": "deepseek-chat",
 }
 
-for key in ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"]:
+for key in ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "TAVILY_API_KEY"]:
     if not os.getenv(key):
         try:
             if key in st.secrets and st.secrets[key]:
                 os.environ[key] = st.secrets[key]
-            else:
+            elif key in FALLBACK_CONFIG:
                 os.environ[key] = FALLBACK_CONFIG.get(key, "")
         except Exception:
-            os.environ[key] = FALLBACK_CONFIG.get(key, "")
+            if key in FALLBACK_CONFIG:
+                os.environ[key] = FALLBACK_CONFIG.get(key, "")
+
+# default_config 在 import 时已创建，需要把后续注入的环境变量同步回去
+default_config.web_search.api_key = os.getenv("TAVILY_API_KEY", "")
 
 # ── 页面配置 ──────────────────────────────────────────
 
