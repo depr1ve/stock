@@ -10,6 +10,7 @@ from models.schemas import StockRequest, AnalysisReport
 from data.fetcher import DataFetcher, FetchError
 from indicators.calculator import IndicatorCalculator
 from agent.analyzer import LLMAnalyzer
+from agent.searcher import WebSearcher
 from report.generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ class StockAnalysisOrchestrator:
         cfg = config or default_config
         self.fetcher = DataFetcher()
         self.calculator = IndicatorCalculator()
+        self.searcher = WebSearcher(cfg.web_search)
         self.analyzer = LLMAnalyzer(cfg.llm)
         self.reporter = ReportGenerator()
 
@@ -49,11 +51,21 @@ class StockAnalysisOrchestrator:
         logger.info("正在计算技术指标...")
         indicators = self.calculator.compute(market_data)
 
-        # 4. LLM 分析
-        logger.info("正在调用 LLM 进行分析...")
-        analysis = await self.analyzer.analyze(market_data, indicators)
+        # 4. 网络情报搜索
+        web_intel = None
+        if self.searcher.available:
+            logger.info("正在搜索网络情报...")
+            web_intel = await self.searcher.search(
+                market_data.stock_code, market_data.stock_name
+            )
+        else:
+            logger.info("Tavily API Key 未配置，跳过网络搜索")
 
-        # 5. 生成报告
+        # 5. LLM 分析
+        logger.info("正在调用 LLM 进行分析...")
+        analysis = await self.analyzer.analyze(market_data, indicators, web_intel)
+
+        # 6. 生成报告
         logger.info("正在生成报告...")
         report = self.reporter.render(indicators, analysis)
 

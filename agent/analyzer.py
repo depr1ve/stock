@@ -9,8 +9,9 @@ from typing import Optional
 from openai import AsyncOpenAI
 
 from config.settings import LLMConfig
-from models.schemas import IndicatorResult, MarketData, AnalysisReport
+from models.schemas import IndicatorResult, MarketData, AnalysisReport, WebIntel
 from agent.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from agent.searcher import WebSearcher
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +26,14 @@ class LLMAnalyzer:
         self.max_tokens = config.max_tokens
         self.timeout = config.timeout
 
-    async def analyze(self, market_data: MarketData, indicators: IndicatorResult) -> AnalysisReport:
+    async def analyze(
+        self,
+        market_data: MarketData,
+        indicators: IndicatorResult,
+        web_intel: WebIntel = None,
+    ) -> AnalysisReport:
         """
-        将行情数据和指标结果注入 prompt，调用 LLM 生成分析报告。
+        将行情数据、指标结果和网络情报注入 prompt，调用 LLM 生成分析报告。
         """
         s = indicators.latest_snapshot
         ps = indicators.period_stats
@@ -77,6 +83,7 @@ class LLMAnalyzer:
             rsi_zone=indicators.rsi_zone,
             boll_position=indicators.boll_position,
             recent_table=recent_table,
+            web_intel=WebSearcher.format_for_prompt(web_intel) if web_intel else "（未提供网络情报）",
         )
 
         try:
@@ -105,6 +112,7 @@ class LLMAnalyzer:
             volume_price=self._extract_section(raw, "量价配合分析"),
             key_levels=self._extract_section(raw, "关键价位"),
             risk=self._extract_section(raw, "风险提示"),
+            news_sentiment=self._extract_section(raw, "消息面"),
             raw_text=raw,
         )
 
@@ -123,21 +131,36 @@ class LLMAnalyzer:
 
     @staticmethod
     def _extract_section(text: str, section_name: str) -> str:
-        """从 LLM 输出中提取指定章节的内容"""
-        for prefix in [f"### {section_name}", f"## {section_name}", f"# {section_name}"]:
-            idx = text.find(prefix)
-            if idx == -1:
-                continue
-            start = idx + len(prefix)
-            # 找下一个 ### 或 ## 作为结束
-            rest = text[start:]
-            end_markers = ["###", "##", "免责声明"]
-            end_pos = len(rest)
-            for marker in end_markers:
-                pos = rest.find(marker)
-                if pos != -1 and pos < end_pos:
-                    end_pos = pos
-            return rest[:end_pos].strip()
+        """从 LLM 输出中提取指定章节的内容，支持精确和模糊匹配"""
+        # 先精确匹配
+        for marker_level in ["###", "##", "#"]:
+            for prefix in [f"{marker_level} {section_name}"]:
+                idx = text.find(prefix)
+                if idx != -1:
+                    start = idx + len(prefix)
+                    rest = text[start:]
+                    end_pos = len(rest)
+                    for end_marker in ["###", "##", "免责声明"]:
+                        pos = rest.find(end_marker)
+                        if pos != -1 and pos < end_pos:
+                            end_pos = pos
+                    return rest[:end_pos].strip()
+
+        # 模糊匹配：搜索包含 section_name 的标题行
+        for line in text.split("\n"):
+            if line.startswith("#") and section_name in line:
+                idx = text.find(line)
+                start = idx + len(line)
+                rest = text[start:]
+                end_pos = len(rest)
+                for end_marker in ["###", "##", "免责声明"]:
+                    pos = rest.find(end_marker)
+                    if pos != -1 and pos < end_pos:
+                        end_pos = pos
+                result = rest[:end_pos].strip()
+                if result:
+                    return result
+
         return text.strip() if len(text) < 200 else ""
 
     @staticmethod

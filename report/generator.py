@@ -67,6 +67,13 @@ class ReportGenerator:
                 analysis.key_levels,
                 "",
             ])
+        if analysis.news_sentiment:
+            lines.extend([
+                "## 消息面与情绪分析",
+                "",
+                analysis.news_sentiment,
+                "",
+            ])
         if analysis.risk:
             lines.extend([
                 "## 风险提示",
@@ -76,7 +83,7 @@ class ReportGenerator:
             ])
 
         # 若 LLM 没有结构化输出，兜底输出 raw
-        if not any([analysis.trend, analysis.volatility, analysis.volume_price]):
+        if not any([analysis.trend, analysis.volatility, analysis.volume_price, analysis.news_sentiment]):
             lines.extend([
                 "---",
                 "",

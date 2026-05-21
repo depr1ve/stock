@@ -22,6 +22,15 @@ class LLMConfig:
 
 
 @dataclass
+class WebSearchConfig:
+    """Tavily 网页搜索配置"""
+    api_key: str = field(default_factory=lambda: os.getenv("TAVILY_API_KEY", ""))
+    max_results: int = 5
+    search_depth: str = "advanced"  # basic / advanced
+    include_domains: list = field(default_factory=lambda: ["eastmoney.com", "sina.com.cn", "10jqka.com.cn", "cninfo.com.cn", "cls.cn"])
+
+
+@dataclass
 class AnalysisConfig:
     """分析参数默认值"""
     default_days: int = 60
@@ -41,6 +50,7 @@ class AnalysisConfig:
 class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
+    web_search: WebSearchConfig = field(default_factory=WebSearchConfig)
 
 
 default_config = Config()

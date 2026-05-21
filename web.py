@@ -22,17 +22,28 @@ from models.schemas import StockRequest
 from data.fetcher import DataFetcher, FetchError
 from indicators.calculator import IndicatorCalculator
 from agent.analyzer import LLMAnalyzer
+from agent.searcher import WebSearcher
 from config.settings import Config, default_config
 from report.generator import ReportGenerator
 
-# 本地 .env 优先，Streamlit Cloud 用 st.secrets
+# 优先级：环境变量 > st.secrets > 内置默认值
 load_dotenv()
-try:
-    for key in ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"]:
-        if key in st.secrets and st.secrets[key]:
-            os.environ[key] = st.secrets[key]
-except Exception:
-    pass  # 本地运行 st.secrets 不可用
+
+FALLBACK_CONFIG = {
+    "LLM_BASE_URL": "https://api.deepseek.com/v1",
+    "LLM_API_KEY": "sk-e623fb6d88ef4568b45968f4032dd10d",
+    "LLM_MODEL": "deepseek-chat",
+}
+
+for key in ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"]:
+    if not os.getenv(key):
+        try:
+            if key in st.secrets and st.secrets[key]:
+                os.environ[key] = st.secrets[key]
+            else:
+                os.environ[key] = FALLBACK_CONFIG.get(key, "")
+        except Exception:
+            os.environ[key] = FALLBACK_CONFIG.get(key, "")
 
 # ── 页面配置 ──────────────────────────────────────────
 
@@ -73,6 +84,7 @@ def init_session():
         "days": 30,
         "market_data": None,
         "indicators": None,
+        "web_intel": None,
         "analysis_report": None,
         "raw_md": "",
     }
@@ -93,11 +105,20 @@ def load_data(code: str, days: int):
     return data, indicators
 
 
-def run_llm_analysis(data, indicators):
+def run_web_search(code: str, name: str):
+    """搜索网络情报"""
+    cfg = default_config
+    searcher = WebSearcher(cfg.web_search)
+    if searcher.available:
+        return asyncio.run(searcher.search(code, name))
+    return None
+
+
+def run_llm_analysis(data, indicators, web_intel=None):
     """调用 LLM 分析"""
     cfg = default_config
     analyzer = LLMAnalyzer(cfg.llm)
-    return asyncio.run(analyzer.analyze(data, indicators))
+    return asyncio.run(analyzer.analyze(data, indicators, web_intel))
 
 
 # ── K 线图 ────────────────────────────────────────────
@@ -295,13 +316,18 @@ def main():
                 st.error(f"数据拉取失败: {e}")
                 return
 
+        # 网络情报搜索
+        with st.spinner("正在搜索相关情报..."):
+            web_intel = run_web_search(data.stock_code, data.stock_name)
+            st.session_state.web_intel = web_intel
+
         api_key = os.getenv("LLM_API_KEY", "")
         has_llm = api_key and api_key != "在此填入你的DeepSeek_API_Key"
 
         if has_llm:
             with st.spinner("正在调用 AI 分析..."):
                 try:
-                    report = run_llm_analysis(data, indicators)
+                    report = run_llm_analysis(data, indicators, web_intel)
                     st.session_state.analysis_report = report
                     gen = ReportGenerator()
                     st.session_state.raw_md = gen.render(indicators, report)
@@ -316,7 +342,7 @@ def main():
             dummy = AnalysisReport(
                 stock_code=data.stock_code, stock_name=data.stock_name,
                 days=data.count, trend="", volatility="", volume_price="",
-                key_levels="", risk=""
+                key_levels="", risk="", news_sentiment=""
             )
             st.session_state.raw_md = gen.render(indicators, dummy)
 
@@ -389,6 +415,19 @@ def main():
                 | RSI | {indicators.rsi_zone} |
                 | 布林位置 | {indicators.boll_position} |
                 """)
+
+        # 网络情报
+        if st.session_state.web_intel and st.session_state.web_intel.results:
+            st.markdown("---")
+            st.markdown("###  网络情报")
+            with st.expander("展开查看最新相关消息", expanded=False):
+                for item in st.session_state.web_intel.results:
+                    date_str = f" ({item.published_date})" if item.published_date else ""
+                    st.markdown(f"**{item.title}**{date_str}")
+                    if item.content:
+                        st.caption(item.content[:300])
+                    st.markdown(f"[阅读原文]({item.url})")
+                    st.markdown("---")
 
         # AI 分析报告
         if st.session_state.raw_md:

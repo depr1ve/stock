@@ -7,3 +7,4 @@ python-dotenv>=1.0.0
 rich>=13.0.0
 streamlit>=1.28.0
 plotly>=5.17.0
+tavily-python>=0.3.0

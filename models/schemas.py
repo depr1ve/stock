@@ -134,6 +134,28 @@ class IndicatorResult(BaseModel):
     boll_position: str = ""      # 价格在布林带中的位置描述
 
 
+# ── 网络情报 ──────────────────────────────────────────
+
+class SearchItem(BaseModel):
+    """单条搜索结果"""
+    title: str
+    url: str
+    content: str = ""
+    score: float = 0.0
+    published_date: str = ""
+
+
+class WebIntel(BaseModel):
+    """聚合网络情报"""
+    stock_code: str
+    stock_name: str
+    query: str = ""
+    results: list[SearchItem] = []
+    summary: str = ""  # LLM 对搜索结果的摘要
+    sentiment: str = ""  # positive / negative / neutral
+    error: str = ""
+
+
 # ── LLM 分析结果 ──────────────────────────────────────
 
 class AnalysisReport(BaseModel):
@@ -146,4 +168,5 @@ class AnalysisReport(BaseModel):
     volume_price: str            # 量价分析
     key_levels: str              # 关键价位
     risk: str                    # 风险提示
+    news_sentiment: str = ""     # 消息面与情绪分析
     raw_text: str = ""           # LLM 原始输出（兜底用）
