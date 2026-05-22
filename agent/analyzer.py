@@ -9,9 +9,10 @@ from typing import Optional
 from openai import AsyncOpenAI
 
 from config.settings import LLMConfig
-from models.schemas import IndicatorResult, MarketData, AnalysisReport, WebIntel
+from models.schemas import IndicatorResult, MarketData, AnalysisReport, WebIntel, AggregatedSentiment
 from agent.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from agent.searcher import WebSearcher
+from agent.sentiment import SentimentAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,10 @@ class LLMAnalyzer:
         market_data: MarketData,
         indicators: IndicatorResult,
         web_intel: WebIntel = None,
+        sentiment: AggregatedSentiment = None,
     ) -> AnalysisReport:
         """
-        将行情数据、指标结果和网络情报注入 prompt，调用 LLM 生成分析报告。
+        将行情数据、指标结果、网络情报和 FinBERT 情绪分析注入 prompt，调用 LLM 生成分析报告。
         """
         s = indicators.latest_snapshot
         ps = indicators.period_stats
@@ -84,6 +86,7 @@ class LLMAnalyzer:
             boll_position=indicators.boll_position,
             recent_table=recent_table,
             web_intel=WebSearcher.format_for_prompt(web_intel) if web_intel else "（未提供网络情报）",
+            sentiment_analysis=SentimentAnalyzer.format_for_prompt(sentiment),
         )
 
         try:

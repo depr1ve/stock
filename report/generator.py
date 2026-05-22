@@ -2,13 +2,17 @@
 报告生成器：将 LLM 分析结果 + 指标数据整合为最终 Markdown 报告。
 """
 
-from models.schemas import IndicatorResult, AnalysisReport
+from typing import Optional
+from models.schemas import IndicatorResult, AnalysisReport, AggregatedSentiment
 
 
 class ReportGenerator:
     """Markdown 报告渲染器"""
 
-    def render(self, indicators: IndicatorResult, analysis: AnalysisReport) -> str:
+    def render(
+        self, indicators: IndicatorResult, analysis: AnalysisReport,
+        sentiment: Optional[AggregatedSentiment] = None,
+    ) -> str:
         s = indicators.latest_snapshot
         ps = indicators.period_stats
 
@@ -37,6 +41,10 @@ class ReportGenerator:
             "---",
             "",
         ]
+
+        # FinBERT 情绪量化分析
+        if sentiment and sentiment.available and sentiment.items:
+            lines.extend(self._render_sentiment(sentiment))
 
         # LLM 分析正文
         if analysis.trend:
@@ -99,6 +107,33 @@ class ReportGenerator:
         ])
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _render_sentiment(sentiment: AggregatedSentiment) -> list[str]:
+        """渲染 FinBERT 情绪分析 section"""
+        lines = [
+            "## 消息面情绪量化分析 (FinBERT)",
+            "",
+            "| 情绪类别 | 概率 |",
+            "|----------|------|",
+            f"| :green[正面] | {sentiment.overall.positive:.1%} |",
+            f"| :gray[中性] | {sentiment.overall.neutral:.1%} |",
+            f"| :red[负面] | {sentiment.overall.negative:.1%} |",
+            "",
+            "### 各来源明细",
+            "",
+            "| 来源类型 | 标题 | 正面 | 中性 | 负面 |",
+            "|----------|------|------|------|------|",
+        ]
+        for item in sorted(sentiment.items, key=lambda x: x.weight, reverse=True):
+            title_short = item.title[:40] + "..." if len(item.title) > 40 else item.title
+            s = item.sentiment
+            lines.append(
+                f"| {item.source_label} | {title_short} | "
+                f"{s.positive:.1%} | {s.neutral:.1%} | {s.negative:.1%} |"
+            )
+        lines.extend(["", "---", ""])
+        return lines
 
     @staticmethod
     def _na(value, precision: int = 2) -> str:

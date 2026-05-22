@@ -23,6 +23,7 @@ from data.fetcher import DataFetcher, FetchError
 from indicators.calculator import IndicatorCalculator
 from agent.analyzer import LLMAnalyzer
 from agent.searcher import WebSearcher
+from agent.sentiment import SentimentAnalyzer
 from config.settings import Config, default_config
 from report.generator import ReportGenerator
 
@@ -118,11 +119,11 @@ def run_web_search(code: str, name: str):
     return None
 
 
-def run_llm_analysis(data, indicators, web_intel=None):
+def run_llm_analysis(data, indicators, web_intel=None, sentiment=None):
     """调用 LLM 分析"""
     cfg = default_config
     analyzer = LLMAnalyzer(cfg.llm)
-    return asyncio.run(analyzer.analyze(data, indicators, web_intel))
+    return asyncio.run(analyzer.analyze(data, indicators, web_intel, sentiment))
 
 
 # ── K 线图 ────────────────────────────────────────────
@@ -325,16 +326,32 @@ def main():
             web_intel = run_web_search(data.stock_code, data.stock_name)
             st.session_state.web_intel = web_intel
 
+        # FinBERT 情绪分析
+        sentiment = None
+        if web_intel and web_intel.results:
+            sentiment_cfg = default_config.sentiment
+            sa = SentimentAnalyzer(sentiment_cfg)
+            if sa.available:
+                with st.spinner("正在进行 FinBERT 情绪分析..."):
+                    try:
+                        sentiment = sa.analyze(web_intel)
+                        if sentiment:
+                            web_intel.sentiment_analysis = sentiment
+                    except Exception:
+                        pass
+            else:
+                sentiment = None
+
         api_key = os.getenv("LLM_API_KEY", "")
         has_llm = api_key and api_key != "在此填入你的DeepSeek_API_Key"
 
         if has_llm:
             with st.spinner("正在调用 AI 分析..."):
                 try:
-                    report = run_llm_analysis(data, indicators, web_intel)
+                    report = run_llm_analysis(data, indicators, web_intel, sentiment)
                     st.session_state.analysis_report = report
                     gen = ReportGenerator()
-                    st.session_state.raw_md = gen.render(indicators, report)
+                    st.session_state.raw_md = gen.render(indicators, report, sentiment)
                 except Exception as e:
                     st.warning(f"AI 分析失败: {e}，仅展示图表数据")
                     st.session_state.analysis_report = None
@@ -348,7 +365,7 @@ def main():
                 days=data.count, trend="", volatility="", volume_price="",
                 key_levels="", risk="", news_sentiment=""
             )
-            st.session_state.raw_md = gen.render(indicators, dummy)
+            st.session_state.raw_md = gen.render(indicators, dummy, sentiment)
 
     # ── 展示结果 ────────────────────────────────────
     if st.session_state.indicators is not None:
@@ -425,13 +442,53 @@ def main():
             st.markdown("---")
             st.markdown("###  网络情报")
             with st.expander("展开查看最新相关消息", expanded=False):
+                # 显示 FinBERT 情绪总结
+                if st.session_state.web_intel.sentiment_analysis:
+                    agg = st.session_state.web_intel.sentiment_analysis
+                    st.markdown("####  情绪量化分析 (FinBERT)")
+                    col_p, col_n, col_neg = st.columns(3)
+                    with col_p:
+                        st.metric("正面概率", f"{agg.overall.positive:.1%}")
+                    with col_n:
+                        st.metric("中性概率", f"{agg.overall.neutral:.1%}")
+                    with col_neg:
+                        st.metric("负面概率", f"{agg.overall.negative:.1%}")
+                    st.markdown("---")
+
                 for item in st.session_state.web_intel.results:
                     date_str = f" ({item.published_date})" if item.published_date else ""
-                    st.markdown(f"**{item.title}**{date_str}")
-                    if item.content:
-                        st.caption(item.content[:300])
-                    st.markdown(f"[阅读原文]({item.url})")
-                    st.markdown("---")
+
+                    source_badge = ""
+                    if item.source_label:
+                        badge_color = {
+                            "交易所公告": "#d9534f",
+                            "公司财报": "#f0ad4e",
+                            "权威媒体": "#5bc0de",
+                            "普通新闻": "#999999",
+                        }.get(item.source_label, "#999999")
+                        source_badge = (
+                            f' <span style="background:{badge_color};color:white;padding:1px 6px;'
+                            f'border-radius:3px;font-size:0.75rem;">{item.source_label}</span>'
+                        )
+
+                    # 来源标签 + FinBERT 情绪分数
+                    sentiment_text = ""
+                    if st.session_state.web_intel.sentiment_analysis:
+                        for si in st.session_state.web_intel.sentiment_analysis.items:
+                            if si.url == item.url:
+                                s = si.sentiment
+                                sentiment_text = (
+                                    f" :green[正面 {s.positive:.1%}] | "
+                                    f":gray[中性 {s.neutral:.1%}] | "
+                                    f":red[负面 {s.negative:.1%}]"
+                                )
+                                break
+
+                    st.markdown(
+                        f"{source_badge}{sentiment_text}  "
+                        f"[阅读原文]({item.url}){date_str}",
+                        unsafe_allow_html=True,
+                    )
 
         # AI 分析报告
         if st.session_state.raw_md:

@@ -88,14 +88,46 @@ class WebSearcher:
 
         items = []
         for r in response.get("results", []):
+            url = r.get("url", "")
+            title = r.get("title", "")
+            source_type, source_label = self._classify_source(url, title)
             items.append(SearchItem(
-                title=r.get("title", ""),
-                url=r.get("url", ""),
+                title=title,
+                url=url,
                 content=r.get("content", "")[:500],
                 score=r.get("score", 0.0),
                 published_date=r.get("published_date", ""),
+                source_type=source_type,
+                source_label=source_label,
             ))
         return items
+
+    @staticmethod
+    def _classify_source(url: str, title: str) -> tuple:
+        """根据域名和标题关键词分类消息来源"""
+        from models.schemas import SourceType
+
+        # 公告/财报关键词（用于 cninfo.com.cn 细分）
+        announcement_keywords = ["公告", "披露", "停牌", "复牌", "重组", "增持", "减持", "质押"]
+        report_keywords = ["年度报告", "季度报告", "年报", "季报", "财报", "业绩", "营收", "净利润", "利润", "分红", "半年报", "三季报", "一季报"]
+
+        if "cninfo.com.cn" in url:
+            combined = title + url
+            for kw in report_keywords:
+                if kw in combined:
+                    return (SourceType.FINANCIAL_REPORT.value, "公司财报")
+            for kw in announcement_keywords:
+                if kw in combined:
+                    return (SourceType.EXCHANGE_ANNOUNCEMENT.value, "交易所公告")
+            return (SourceType.EXCHANGE_ANNOUNCEMENT.value, "交易所公告")
+
+        if any(d in url for d in ["eastmoney.com", "10jqka.com.cn", "cls.cn"]):
+            return (SourceType.AUTHORITATIVE_MEDIA.value, "权威媒体")
+
+        if "sina.com.cn" in url:
+            return (SourceType.GENERAL_NEWS.value, "普通新闻")
+
+        return (SourceType.GENERAL_NEWS.value, "普通新闻")
 
     @staticmethod
     def format_for_prompt(intel: WebIntel) -> str:
@@ -109,7 +141,8 @@ class WebSearcher:
         lines = [f"以下是通过网络搜索获取的关于 {intel.stock_name or intel.stock_code} 的最新情报：", ""]
         for i, item in enumerate(intel.results, 1):
             date_str = f" ({item.published_date})" if item.published_date else ""
-            lines.append(f"**{i}. {item.title}**{date_str}")
+            source_tag = f" [{item.source_label}]" if item.source_label else ""
+            lines.append(f"**{i}. {item.title}**{date_str}{source_tag}")
             if item.content:
                 lines.append(f"   {item.content[:300]}")
             lines.append(f"   来源: {item.url}")

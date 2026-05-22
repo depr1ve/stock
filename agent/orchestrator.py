@@ -11,6 +11,7 @@ from data.fetcher import DataFetcher, FetchError
 from indicators.calculator import IndicatorCalculator
 from agent.analyzer import LLMAnalyzer
 from agent.searcher import WebSearcher
+from agent.sentiment import SentimentAnalyzer
 from report.generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class StockAnalysisOrchestrator:
         self.fetcher = DataFetcher()
         self.calculator = IndicatorCalculator()
         self.searcher = WebSearcher(cfg.web_search)
+        self.sentiment_analyzer = SentimentAnalyzer(cfg.sentiment)
         self.analyzer = LLMAnalyzer(cfg.llm)
         self.reporter = ReportGenerator()
 
@@ -61,13 +63,26 @@ class StockAnalysisOrchestrator:
         else:
             logger.info("Tavily API Key 未配置，跳过网络搜索")
 
+        # 4.5 FinBERT 情绪分析
+        sentiment = None
+        if web_intel and web_intel.results and self.sentiment_analyzer.available:
+            logger.info("正在进行 FinBERT 情绪分析...")
+            try:
+                sentiment = self.sentiment_analyzer.analyze(web_intel)
+                if sentiment:
+                    web_intel.sentiment_analysis = sentiment
+            except Exception as e:
+                logger.warning("FinBERT 情绪分析失败: %s", e)
+        else:
+            logger.info("跳过 FinBERT 情绪分析（搜索无结果或模型不可用）")
+
         # 5. LLM 分析
         logger.info("正在调用 LLM 进行分析...")
-        analysis = await self.analyzer.analyze(market_data, indicators, web_intel)
+        analysis = await self.analyzer.analyze(market_data, indicators, web_intel, sentiment)
 
         # 6. 生成报告
         logger.info("正在生成报告...")
-        report = self.reporter.render(indicators, analysis)
+        report = self.reporter.render(indicators, analysis, sentiment)
 
         return report
 

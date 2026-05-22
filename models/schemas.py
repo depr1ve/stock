@@ -4,9 +4,18 @@ Pydantic 数据模型：请求/行情/指标/报告。
 """
 
 from datetime import date
+from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 import re
+
+
+class SourceType(str, Enum):
+    """消息来源类型，按权威性从高到低排列"""
+    EXCHANGE_ANNOUNCEMENT = "exchange_announcement"    # 交易所公告
+    FINANCIAL_REPORT = "financial_report"              # 公司财报
+    AUTHORITATIVE_MEDIA = "authoritative_media"        # 权威媒体
+    GENERAL_NEWS = "general_news"                      # 普通新闻
 
 
 # ── 输入 ──────────────────────────────────────────────
@@ -143,6 +152,8 @@ class SearchItem(BaseModel):
     content: str = ""
     score: float = 0.0
     published_date: str = ""
+    source_type: Optional[str] = None   # SourceType 枚举值
+    source_label: Optional[str] = None  # 中文标签，如"交易所公告"
 
 
 class WebIntel(BaseModel):
@@ -154,6 +165,34 @@ class WebIntel(BaseModel):
     summary: str = ""  # LLM 对搜索结果的摘要
     sentiment: str = ""  # positive / negative / neutral
     error: str = ""
+    sentiment_analysis: Optional["AggregatedSentiment"] = None  # FinBERT 情绪分析结果
+
+
+# ── FinBERT 情绪分析 ──────────────────────────────────
+
+class SentimentScore(BaseModel):
+    """FinBERT 情绪概率分布"""
+    positive: float = 0.0
+    neutral: float = 0.0
+    negative: float = 0.0
+
+
+class SourceSentiment(BaseModel):
+    """单条消息的 FinBERT 情绪分析结果"""
+    title: str
+    url: str
+    source_type: str = ""          # SourceType 枚举值
+    source_label: str = ""         # 中文标签
+    weight: float = 0.0            # 来源权重
+    sentiment: SentimentScore = Field(default_factory=SentimentScore)
+
+
+class AggregatedSentiment(BaseModel):
+    """加权汇总后的情绪分析结果"""
+    items: list[SourceSentiment] = []
+    overall: SentimentScore = Field(default_factory=SentimentScore)
+    available: bool = False        # FinBERT 是否可用
+    error: Optional[str] = None
 
 
 # ── LLM 分析结果 ──────────────────────────────────────

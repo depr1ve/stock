@@ -31,6 +31,23 @@ class WebSearchConfig:
 
 
 @dataclass
+class SentimentConfig:
+    """FinBERT 情绪分析配置"""
+    model_name: str = "ProsusAI/finbert"
+    enabled: bool = True
+    device: str = "cpu"  # cpu / cuda
+    source_weights: dict = field(default_factory=lambda: {
+        "exchange_announcement": 0.40,
+        "financial_report": 0.30,
+        "authoritative_media": 0.20,
+        "general_news": 0.10,
+    })
+    fetch_full_content: bool = True   # Tavily snippet 太短时自动拉取完整页面
+    fetch_timeout: int = 10           # 拉取页面超时秒数
+    min_content_length: int = 100     # snippet 低于此长度时尝试拉取正文
+
+
+@dataclass
 class AnalysisConfig:
     """分析参数默认值"""
     default_days: int = 60
@@ -51,6 +68,7 @@ class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
     web_search: WebSearchConfig = field(default_factory=WebSearchConfig)
+    sentiment: SentimentConfig = field(default_factory=SentimentConfig)
 
 
 default_config = Config()
