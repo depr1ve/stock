@@ -62,28 +62,36 @@ streamlit run web.py --server.port 8501
 ┌─────────────────┐
 │  WebSearcher     │  Tavily API 搜索标的新闻/公告/研报（可选）
 │  默认聚焦:        │  未配置 Key 时静默跳过
-│  东方财富/新浪/同花顺 │
+│  东方财富/新浪/同花顺 │  → 自动识别来源类型并标注
 │  巨潮资讯/财联社   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ SentimentAnalyzer│  FinBERT 量化情绪分析（可选）
+│  按来源权威性加权:  │  transformers/prosusAI/finbert
+│  公告40% 财报30%  │  不可用时静默降级
+│  媒体20% 新闻10%  │  → 正面/中性/负面概率
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
 │  LLMAnalyzer     │  结构化 prompt 注入 → 多维度分析
 │  ① 趋势判断       │  OpenAI 协议 (兼容 GPT/DeepSeek/Qwen/Claude)
-│  ② 波动率分析     │
-│  ③ 量价配合       │
+│  ② 波动率分析     │  ← 注入技术指标 + 网络情报
+│  ③ 量价配合       │  ← 注入 FinBERT 情绪分数
 │  ④ 关键价位       │
-│  ⑤ 消息面分析     │  ← 结合网络情报
+│  ⑤ 消息面分析     │
 │  ⑥ 风险提示       │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  ReportGenerator  │  Markdown 报告输出
+│  ReportGenerator  │  Markdown 报告输出（含情绪量化表）
 └─────────────────┘
 ```
 
-**核心思想：确定性计算归代码，模糊判断归 LLM。** 只有 `agent/analyzer.py` 调用大模型，其余全是代码逻辑。
+**核心思想：确定性计算归代码，模糊判断归 LLM。** 只有 `agent/analyzer.py` 调用大模型，FinBERT 也是确定性 ML 推理，其余全是代码逻辑。
 
 ## 项目结构
 
@@ -111,9 +119,13 @@ Stock/
 │
 ├── agent/
 │   ├── prompts.py           # System Prompt + User Prompt 模板
-│   ├── searcher.py          # Tavily 网页搜索（新闻/公告/研报）
+│   ├── searcher.py          # Tavily 网页搜索 + 来源自动分类
+│   ├── sentiment.py         # FinBERT 情绪分析 + 来源加权汇总
 │   ├── analyzer.py          # LLM 分析器（prompt 注入 + 结果解析）
 │   └── orchestrator.py      # Pipeline 编排器（串联全部步骤）
+│
+├── utils/
+│   └── http_utils.py        # 编码安全 HTTP 抓取（apparent_encoding 检测）
 │
 └── report/
     └── generator.py         # Markdown 报告渲染
@@ -130,11 +142,13 @@ Stock/
 | **数据模型** | `models/schemas.py` | `StockRequest` → `MarketData` → `IndicatorResult` → `WebIntel` → `AnalysisReport`，全链路类型安全 |
 | **数据层** | `data/fetcher.py` | akshare 行情拉取，新浪源优先，东方财富源兜底，自动重试 |
 | **指标层** | `indicators/calculator.py` | 纯 numpy 计算 MA/MACD/RSI/布林带/ATR/量比，不依赖 LLM |
-| **搜索层** | `agent/searcher.py` | Tavily API 搜索标的相关新闻/公告/研报，默认聚焦 5 个财经站点 |
-| **分析层** | `agent/prompts.py` | System Prompt（角色设定）+ User Prompt（数据注入模板） |
-| | `agent/analyzer.py` | 将指标数据 + 网络情报注入 prompt，调用 LLM，解析结构化结果 |
-| | `agent/orchestrator.py` | 编排完整流水线：校验 → 拉取 → 指标 → 搜索 → LLM → 报告 |
-| **报告层** | `report/generator.py` | 将指标摘要 + LLM 分析结果渲染为 Markdown 报告 |
+| **搜索层** | `agent/searcher.py` | Tavily API 搜索标的相关新闻/公告/研报，默认聚焦 5 个财经站点，自动标注来源类型 |
+| **情绪层** | `agent/sentiment.py` | FinBERT 情感分析，按来源权威性加权汇总，输出正面/中性/负面概率 |
+| **工具层** | `utils/http_utils.py` | 编码安全 HTTP 抓取，apparent_encoding 自动检测 GBK/UTF-8，支持提取式摘要 |
+| **分析层** | `agent/prompts.py` | System Prompt（角色设定）+ User Prompt（数据注入模板，含 FinBERT 情绪分数） |
+| | `agent/analyzer.py` | 将指标数据 + 网络情报 + 情绪分析注入 prompt，调用 LLM，解析结构化结果 |
+| | `agent/orchestrator.py` | 编排完整流水线：校验 → 拉取 → 指标 → 搜索 → 情绪分析 → LLM → 报告 |
+| **报告层** | `report/generator.py` | 将指标摘要 + FinBERT 情绪量化表 + LLM 分析结果渲染为 Markdown 报告 |
 
 ## LLM 分析维度
 
@@ -144,7 +158,7 @@ Stock/
 | 波动率分析 | ATR + 布林带宽 + 振幅 → 波动水平与收敛/发散趋势 |
 | 量价配合 | 涨跌天数分布 + 放量/缩量与价格方向配合关系 |
 | 关键价位 | 均线位置 + 布林轨 + 近期高低点 → 支撑位/压力位 |
-| 消息面分析 | 结合网络情报分析近期消息影响，判断情绪偏正面/负面/中性 |
+| 消息面分析 | 结合网络情报 + FinBERT 量化情绪分数，判断情绪偏正面/负面/中性 |
 | 风险提示 | 综合技术面 + 消息面，列出 2-3 条短期风险 |
 
 ## 技术指标
@@ -187,6 +201,22 @@ ngrok http 8501
 npx localtunnel --port 8501
 ```
 
+## FinBERT 情绪分析
+
+系统在 LLM 分析前自动对每条搜索结果做量化情绪评估：
+
+| 来源类型 | 域名 | 权重 | 说明 |
+|---------|------|------|------|
+| 交易所公告 | cninfo.com.cn (含"公告/披露"标题) | 0.40 | 最高权威性 |
+| 公司财报 | cninfo.com.cn (含"年报/季报/业绩"标题) | 0.30 | 官方财务数据 |
+| 权威媒体 | eastmoney.com / 10jqka.com.cn / cls.cn | 0.20 | 专业财经媒体 |
+| 普通新闻 | sina.com.cn 及其他 | 0.10 | 一般网络来源 |
+
+- 模型：`ProsusAI/finbert`，首次使用时自动下载
+- Tavily 摘要短于 100 字时自动抓取完整页面正文，先做提取式摘要再分析
+- `transformers` / `torch` 不可用时静默降级，不影响核心流程
+- 输出：每条来源的正面/中性/负面概率 + 加权汇总概率
+
 ## 环境变量
 
 | 变量 | 说明 | 默认值 | 必填 |
@@ -208,4 +238,7 @@ npx localtunnel --port 8501
 | streamlit | Web 界面 |
 | plotly | K 线图与指标可视化 |
 | rich | 交互式终端美化 |
+| requests | 编码安全 HTTP 抓取（apparent_encoding） |
+| transformers | FinBERT 情感分析（可选，不可用时静默降级） |
+| torch | FinBERT 模型推理（可选） |
 | python-dotenv | 环境变量加载 |
