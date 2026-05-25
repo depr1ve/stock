@@ -8,17 +8,16 @@
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
-# 编辑 .env 填入 LLM_API_KEY
+# 创建 .env 文件，填入 LLM_API_KEY（详见下方环境变量说明）
 ```
 
 ### 两种启动方式
 
 ```bash
 # 命令行
-python main.py 600000              # 浦发银行，默认60天
-python main.py 000001 -d 30        # 平安银行，30天
-python main.py 300750 -o a.md      # 宁德时代，输出到文件
+python -m agent.cli 600000          # 浦发银行，默认60天
+python -m agent.cli 000001 -d 30    # 平安银行，30天
+python -m agent.cli 300750 -o a.md  # 宁德时代，输出到文件
 
 # Web 界面
 streamlit run web.py --server.port 8501
@@ -30,10 +29,10 @@ streamlit run web.py --server.port 8501
 
 ```
 Stock/
-├── main.py / web.py               # 两个入口
+├── web.py                         # Web 入口 (Streamlit)
 ├── requirements.txt
-├── .env.example
 └── agent/                         # 核心包
+    ├── cli.py                     # CLI 入口 (python -m agent.cli)
     ├── orchestrator.py            # Pipeline 编排
     ├── analyzer.py / prompts.py   # LLM 调用 + Prompt
     ├── searcher.py                # Tavily 搜索 + 来源分类 (可选)
