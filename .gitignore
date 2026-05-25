@@ -1,10 +1,6 @@
 __pycache__/
 *.pyc
 .env
-history/
-*.zip
-natapp.exe
-ngrok.exe
 .DS_Store
 .claude/
 .idea/
