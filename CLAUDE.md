@@ -5,7 +5,6 @@
 | 入口 | 启动方式 | 用途 |
 |------|---------|------|
 | `web.py` | `streamlit run web.py --server.port 8501` | Web 界面 |
-| `app.py` | `python app.py` | Rich CLI 交互式 |
 | `main.py` | `python main.py 600000 -d 30` | 命令行单次 |
 
 线上：https://depr1ve-stock.streamlit.app
@@ -14,7 +13,7 @@
 
 ```
 root/
-├── app.py / main.py / web.py          # 三个入口
+├── main.py / web.py                   # 两个入口
 └── agent/                             # 核心包
     ├── orchestrator.py                # Pipeline 编排
     ├── analyzer.py / prompts.py       # LLM 调用 + Prompt

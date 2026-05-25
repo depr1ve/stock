@@ -1,176 +1,70 @@
 # A 股智能分析 Agent
 
-基于 akshare + LLM 的 A 股技术分析报告自动生成系统。支持本地命令行、交互式终端、Web 界面三种使用方式。
+基于 akshare + LLM 的 A 股技术分析报告自动生成系统。
+
+线上公开版：https://depr1ve-stock.streamlit.app
 
 ## 快速开始
 
 ```bash
-# 1. 安装依赖
 pip install -r requirements.txt
-
-# 2. 配置 API Key
 cp .env.example .env
-# 编辑 .env 填入 LLM_API_KEY（必填）和 TAVILY_API_KEY（可选，用于消息面分析）
+# 编辑 .env 填入 LLM_API_KEY
 ```
 
-### 三种启动方式
+### 两种启动方式
 
 ```bash
-# 方式一：命令行单次（最简单）
+# 命令行
 python main.py 600000              # 浦发银行，默认60天
 python main.py 000001 -d 30        # 平安银行，30天
 python main.py 300750 -o a.md      # 宁德时代，输出到文件
 
-# 方式二：交互式终端（菜单导航 + 历史记录）
-python app.py
-
-# 方式三：Web 界面（图表可视化 + AI 报告）
+# Web 界面
 streamlit run web.py --server.port 8501
 ```
 
-### 离线使用
-
-不配置 LLM_API_KEY 时，Web 界面仍可正常展示 K 线图和技术指标，仅 AI 分析报告不可用。命令行模式需要 Key。
-
-## 架构
-
-```
-用户输入 (A股代码 + 天数)
-  │
-  ▼
-┌─────────────────┐
-│  StockRequest    │  Pydantic 校验 + 市场前缀自动补全 (600000 → sh.600000)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  DataFetcher     │  akshare 双源容灾 (新浪 → 东方财富)，自动重试
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  IndicatorCalc   │  纯 numpy/pandas 确定性计算，无 LLM 依赖
-│  · MA5/10/20/60  │
-│  · MACD (DIF/DEA/柱) │
-│  · RSI(14)       │
-│  · 布林带(20,2)   │
-│  · ATR(14)       │
-│  · 量比          │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  WebSearcher     │  Tavily API 搜索标的新闻/公告/研报（可选）
-│  默认聚焦:        │  未配置 Key 时静默跳过
-│  东方财富/新浪/同花顺 │  → 自动识别来源类型并标注
-│  巨潮资讯/财联社   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ SentimentAnalyzer│  FinBERT 量化情绪分析（可选）
-│  按来源权威性加权:  │  transformers/prosusAI/finbert
-│  公告40% 财报30%  │  不可用时静默降级
-│  媒体20% 新闻10%  │  → 正面/中性/负面概率
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  LLMAnalyzer     │  结构化 prompt 注入 → 多维度分析
-│  ① 趋势判断       │  OpenAI 协议 (兼容 GPT/DeepSeek/Qwen/Claude)
-│  ② 波动率分析     │  ← 注入技术指标 + 网络情报
-│  ③ 量价配合       │  ← 注入 FinBERT 情绪分数
-│  ④ 关键价位       │
-│  ⑤ 消息面分析     │
-│  ⑥ 风险提示       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  ReportGenerator  │  Markdown 报告输出（含情绪量化表）
-└─────────────────┘
-```
-
-**核心思想：确定性计算归代码，模糊判断归 LLM。** 只有 `agent/analyzer.py` 调用大模型，FinBERT 也是确定性 ML 推理，其余全是代码逻辑。
+不配置 LLM_API_KEY 时，Web 界面仍可展示 K 线图和技术指标，仅 AI 报告不可用。
 
 ## 项目结构
 
 ```
 Stock/
-├── main.py                  # CLI 单次入口 (python main.py 600000)
-├── app.py                   # 交互式终端 (Rich 菜单)
-├── web.py                   # Web 界面 (Streamlit + Plotly K线图)
-├── requirements.txt         # Python 依赖
-├── Dockerfile               # Docker 镜像
-├── docker-compose.yml       # 一键部署
-├── .env.example             # 环境变量模板
-│
-├── config/
-│   └── settings.py          # LLM / WebSearch / Analysis 配置
-│
-├── models/
-│   └── schemas.py           # 数据模型 (StockRequest → MarketData → IndicatorResult → AnalysisReport → WebIntel)
-│
-├── data/
-│   └── fetcher.py           # akshare 行情拉取（新浪+东方财富双源容灾）
-│
-├── indicators/
-│   └── calculator.py        # 技术指标计算 (MA/MACD/RSI/布林带/ATR/量比)
-│
-├── agent/
-│   ├── prompts.py           # System Prompt + User Prompt 模板
-│   ├── searcher.py          # Tavily 网页搜索 + 来源自动分类
-│   ├── sentiment.py         # FinBERT 情绪分析 + 来源加权汇总
-│   ├── analyzer.py          # LLM 分析器（prompt 注入 + 结果解析）
-│   └── orchestrator.py      # Pipeline 编排器（串联全部步骤）
-│
-├── utils/
-│   └── http_utils.py        # 编码安全 HTTP 抓取（apparent_encoding 检测）
-│
-└── report/
-    └── generator.py         # Markdown 报告渲染
+├── main.py / web.py               # 两个入口
+├── requirements.txt
+├── .env.example
+└── agent/                         # 核心包
+    ├── orchestrator.py            # Pipeline 编排
+    ├── analyzer.py / prompts.py   # LLM 调用 + Prompt
+    ├── searcher.py                # Tavily 搜索 + 来源分类 (可选)
+    ├── sentiment.py               # FinBERT 情绪分析 (可选)
+    ├── config/settings.py         # 所有配置
+    ├── data/fetcher.py            # akshare 行情获取 (新浪→东方财富双源容灾)
+    ├── indicators/calculator.py   # 技术指标 (numpy: MA/MACD/RSI/布林带/ATR/量比)
+    ├── models/schemas.py          # 数据模型
+    ├── report/generator.py        # Markdown 报告渲染
+    └── utils/http_utils.py        # HTTP 安全抓取 (apparent_encoding)
 ```
 
-## 各模块用途
+**原则：确定性计算归代码，模糊判断归 LLM。**
 
-| 模块 | 文件 | 功能 |
-|------|------|------|
-| **入口层** | `main.py` | 命令行单次分析，支持 `-d` 天数、`-o` 输出文件 |
-| | `app.py` | 交互式终端，Rich 菜单导航，支持历史记录和配置管理 |
-| | `web.py` | Web 界面，Plotly K线图 + 指标可视化 + AI 报告 + 网络情报卡片 |
-| **配置** | `config/settings.py` | 管理 LLM 连接参数、Tavily 搜索参数、分析参数，从 `.env` 加载 |
-| **数据模型** | `models/schemas.py` | `StockRequest` → `MarketData` → `IndicatorResult` → `WebIntel` → `AnalysisReport`，全链路类型安全 |
-| **数据层** | `data/fetcher.py` | akshare 行情拉取，新浪源优先，东方财富源兜底，自动重试 |
-| **指标层** | `indicators/calculator.py` | 纯 numpy 计算 MA/MACD/RSI/布林带/ATR/量比，不依赖 LLM |
-| **搜索层** | `agent/searcher.py` | Tavily API 搜索标的相关新闻/公告/研报，默认聚焦 5 个财经站点，自动标注来源类型 |
-| **情绪层** | `agent/sentiment.py` | FinBERT 情感分析，按来源权威性加权汇总，输出正面/中性/负面概率 |
-| **工具层** | `utils/http_utils.py` | 编码安全 HTTP 抓取，apparent_encoding 自动检测 GBK/UTF-8，支持提取式摘要 |
-| **分析层** | `agent/prompts.py` | System Prompt（角色设定）+ User Prompt（数据注入模板，含 FinBERT 情绪分数） |
-| | `agent/analyzer.py` | 将指标数据 + 网络情报 + 情绪分析注入 prompt，调用 LLM，解析结构化结果 |
-| | `agent/orchestrator.py` | 编排完整流水线：校验 → 拉取 → 指标 → 搜索 → 情绪分析 → LLM → 报告 |
-| **报告层** | `report/generator.py` | 将指标摘要 + FinBERT 情绪量化表 + LLM 分析结果渲染为 Markdown 报告 |
+## 分析维度
 
-## LLM 分析维度
+| # | 维度 | 数据来源 |
+|---|------|---------|
+| 1 | 趋势判断 | 均线排列 + MACD + 涨跌幅 |
+| 2 | 波动率分析 | ATR + 布林带宽 + 振幅 |
+| 3 | 量价配合 | 涨跌天数 + 量能变化 |
+| 4 | 关键价位 | 均线 + 布林轨 + 高低点 |
+| 5 | 消息面分析 | Tavily 网络情报 + FinBERT 量化情绪 |
+| 6 | 风险提示 | 综合以上 |
 
-| 维度 | 说明 |
-|------|------|
-| 趋势判断 | 均线排列 + MACD + 涨跌幅 → 偏多/偏空/震荡 + 置信度 |
-| 波动率分析 | ATR + 布林带宽 + 振幅 → 波动水平与收敛/发散趋势 |
-| 量价配合 | 涨跌天数分布 + 放量/缩量与价格方向配合关系 |
-| 关键价位 | 均线位置 + 布林轨 + 近期高低点 → 支撑位/压力位 |
-| 消息面分析 | 结合网络情报 + FinBERT 量化情绪分数，判断情绪偏正面/负面/中性 |
-| 风险提示 | 综合技术面 + 消息面，列出 2-3 条短期风险 |
+## FinBERT 情绪分析
 
-## 技术指标
-
-| 指标 | 参数 | 说明 |
-|------|------|------|
-| MA | 5/10/20/60 | 简单移动均线，判断多头/空头排列 |
-| MACD | 12/26/9 | DIF/DEA/柱，金叉死叉信号 |
-| RSI | 14 | 超买(>70)/超卖(<30)判断 |
-| 布林带 | 20, 2σ | 上中下轨 + 带宽，价格相对位置 |
-| ATR | 14 | 平均真实波幅，波动率度量 |
-| 量比 | 5日均量 | 当日成交量与5日均量比值 |
+- 模型：`ProsusAI/finbert`，首次使用自动下载，transformers/torch 不可用时静默降级
+- 按来源权威性加权汇总：交易所公告(0.40) > 公司财报(0.30) > 权威媒体(0.20) > 普通新闻(0.10)
+- cninfo.com.cn 域名按标题关键词细分公告/财报
+- Tavily 摘要短于 100 字时自动抓取完整正文
 
 ## 支持的股票代码
 
@@ -182,49 +76,16 @@ Stock/
 | `sh.688111` | 原样保留 | 科创板 |
 | `bj.430047` | 原样保留 | 北交所 |
 
-## 远程部署
-
-### Docker 一键部署
-
-```bash
-docker compose up -d
-# 访问 http://你的服务器IP:8501
-```
-
-### 内网穿透（临时分享）
-
-```bash
-# ngrok
-ngrok http 8501
-
-# localtunnel
-npx localtunnel --port 8501
-```
-
-## FinBERT 情绪分析
-
-系统在 LLM 分析前自动对每条搜索结果做量化情绪评估：
-
-| 来源类型 | 域名 | 权重 | 说明 |
-|---------|------|------|------|
-| 交易所公告 | cninfo.com.cn (含"公告/披露"标题) | 0.40 | 最高权威性 |
-| 公司财报 | cninfo.com.cn (含"年报/季报/业绩"标题) | 0.30 | 官方财务数据 |
-| 权威媒体 | eastmoney.com / 10jqka.com.cn / cls.cn | 0.20 | 专业财经媒体 |
-| 普通新闻 | sina.com.cn 及其他 | 0.10 | 一般网络来源 |
-
-- 模型：`ProsusAI/finbert`，首次使用时自动下载
-- Tavily 摘要短于 100 字时自动抓取完整页面正文，先做提取式摘要再分析
-- `transformers` / `torch` 不可用时静默降级，不影响核心流程
-- 输出：每条来源的正面/中性/负面概率 + 加权汇总概率
-
 ## 环境变量
 
-| 变量 | 说明 | 默认值 | 必填 |
-|------|------|--------|------|
-| `LLM_BASE_URL` | LLM API 地址 | `https://api.openai.com/v1` | 否 |
-| `LLM_API_KEY` | LLM API 密钥 | — | 是（CLI）/ 否（Web 图表模式） |
-| `LLM_MODEL` | 模型名称 | `gpt-4o` | 否 |
-| `TAVILY_API_KEY` | Tavily 搜索密钥 | — | 否（不配则跳过消息面分析） |
+| 变量 | 说明 | 必填 |
+|------|------|------|
+| `LLM_BASE_URL` | LLM API 地址 | 否 |
+| `LLM_API_KEY` | LLM API 密钥 | 是(CLI) / 否(Web图表模式) |
+| `LLM_MODEL` | 模型名称 | 否 |
+| `TAVILY_API_KEY` | Tavily 搜索密钥 | 否 |
+
+使用 OpenAI 兼容协议，支持 DeepSeek/Qwen/GPT/Claude。
 
 ## 依赖
 
@@ -232,13 +93,11 @@ npx localtunnel --port 8501
 |----|------|
 | akshare | A 股免费行情数据 |
 | pandas / numpy | 数据处理与指标计算 |
-| pydantic | 数据校验与模型定义 |
-| openai | LLM 调用（兼容 DeepSeek/Qwen/GPT/Claude） |
-| tavily-python | 网页搜索（新闻/公告/研报） |
+| pydantic | 数据校验 |
+| openai | LLM 调用 |
+| tavily-python | 网页搜索 |
 | streamlit | Web 界面 |
-| plotly | K 线图与指标可视化 |
-| rich | 交互式终端美化 |
-| requests | 编码安全 HTTP 抓取（apparent_encoding） |
-| transformers | FinBERT 情感分析（可选，不可用时静默降级） |
-| torch | FinBERT 模型推理（可选） |
+| plotly | K 线图可视化 |
+| requests | HTTP 抓取 |
+| transformers / torch | FinBERT 情绪分析 (可选) |
 | python-dotenv | 环境变量加载 |
