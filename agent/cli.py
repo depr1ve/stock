@@ -15,6 +15,9 @@ import logging
 import sys
 import os
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from agent.orchestrator import StockAnalysisOrchestrator
 from agent.data.fetcher import FetchError
 
