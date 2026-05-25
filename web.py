@@ -32,7 +32,7 @@ load_dotenv()
 
 FALLBACK_CONFIG = {
     "LLM_BASE_URL": "https://api.deepseek.com/v1",
-    "LLM_API_KEY": "sk-e623fb6d88ef4568b45968f4032dd10d",
+    "LLM_API_KEY": "sk-8d9c298feb3040f9bb670430fd681a8b",
     "LLM_MODEL": "deepseek-chat",
 }
 
