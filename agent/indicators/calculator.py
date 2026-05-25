@@ -9,8 +9,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from config.settings import default_config
-from models.schemas import (
+from agent.config.settings import default_config
+from agent.models.schemas import (
     IndicatorResult,
     IndicatorSnapshot,
     PeriodStats,

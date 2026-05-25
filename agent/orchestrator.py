@@ -5,14 +5,14 @@ Pipeline 编排器：串联 输入校验 → 数据拉取 → 指标计算 → L
 
 import logging
 
-from config.settings import Config, default_config
-from models.schemas import StockRequest, AnalysisReport
-from data.fetcher import DataFetcher, FetchError
-from indicators.calculator import IndicatorCalculator
+from agent.config.settings import Config, default_config
+from agent.models.schemas import StockRequest, AnalysisReport
+from agent.data.fetcher import DataFetcher, FetchError
+from agent.indicators.calculator import IndicatorCalculator
 from agent.analyzer import LLMAnalyzer
 from agent.searcher import WebSearcher
 from agent.sentiment import SentimentAnalyzer
-from report.generator import ReportGenerator
+from agent.report.generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
 

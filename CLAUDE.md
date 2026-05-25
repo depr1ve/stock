@@ -10,25 +10,25 @@
 
 线上：https://depr1ve-stock.streamlit.app
 
-## 架构
+## 结构
 
 ```
-入口 → orchestrator.py → data/fetcher.py (akshare 双源容灾)
-                       → indicators/calculator.py (MA/MACD/RSI/布林带/ATR/量比, numpy)
-                       → agent/searcher.py (Tavily 搜索 + 来源分类) [可选]
-                       → agent/sentiment.py (FinBERT 情绪分析) [可选]
-                       → agent/analyzer.py (LLM → 结构化报告)
-                       → report/generator.py (Markdown 渲染)
+root/
+├── app.py / main.py / web.py          # 三个入口
+└── agent/                             # 核心包
+    ├── orchestrator.py                # Pipeline 编排
+    ├── analyzer.py / prompts.py       # LLM 调用 + Prompt
+    ├── searcher.py                    # Tavily 搜索 (可选)
+    ├── sentiment.py                   # FinBERT 情绪 (可选)
+    ├── config/settings.py             # 所有配置
+    ├── data/fetcher.py                # akshare 数据获取
+    ├── indicators/calculator.py       # 技术指标 (numpy)
+    ├── models/schemas.py              # 数据模型
+    ├── report/generator.py            # Markdown 报告
+    └── utils/http_utils.py            # HTTP 安全抓取
 ```
 
 **原则：确定性计算归代码，模糊判断归 LLM。**
-
-## 关键文件
-
-- 配置：`config/settings.py`
-- Prompt：`agent/prompts.py`
-- 环境变量：`.env` 或 Streamlit Secrets
-- `.env` 在 `.gitignore` 中，不上传
 
 ## 环境变量
 

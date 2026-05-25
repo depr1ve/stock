@@ -6,8 +6,8 @@
 import logging
 from typing import Optional
 
-from config.settings import WebSearchConfig
-from models.schemas import WebIntel, SearchItem
+from agent.config.settings import WebSearchConfig
+from agent.models.schemas import WebIntel, SearchItem
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class WebSearcher:
     @staticmethod
     def _classify_source(url: str, title: str) -> tuple:
         """根据域名和标题关键词分类消息来源"""
-        from models.schemas import SourceType
+        from agent.models.schemas import SourceType
 
         # 公告/财报关键词（用于 cninfo.com.cn 细分）
         announcement_keywords = ["公告", "披露", "停牌", "复牌", "重组", "增持", "减持", "质押"]

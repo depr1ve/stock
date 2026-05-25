@@ -6,8 +6,8 @@ FinBERT 情绪分析器：对网络情报进行量化情绪分析，按来源权
 import logging
 from typing import Optional
 
-from config.settings import SentimentConfig
-from models.schemas import (
+from agent.config.settings import SentimentConfig
+from agent.models.schemas import (
     WebIntel, SearchItem, AggregatedSentiment, SourceSentiment, SentimentScore,
 )
 
@@ -78,7 +78,7 @@ class SentimentAnalyzer:
             and len(clean) < self.min_content_length
         ):
             try:
-                from utils.http_utils import fetch_text, summarize_text
+                from agent.utils.http_utils import fetch_text, summarize_text
                 full = fetch_text(url, timeout=self.fetch_timeout)
                 if full and len(full) > len(clean):
                     summary = summarize_text(full)

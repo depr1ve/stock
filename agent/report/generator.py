@@ -3,7 +3,7 @@
 """
 
 from typing import Optional
-from models.schemas import IndicatorResult, AnalysisReport, AggregatedSentiment
+from agent.models.schemas import IndicatorResult, AnalysisReport, AggregatedSentiment
 
 
 class ReportGenerator:

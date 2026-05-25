@@ -8,8 +8,8 @@ from typing import Optional
 
 from openai import AsyncOpenAI
 
-from config.settings import LLMConfig
-from models.schemas import IndicatorResult, MarketData, AnalysisReport, WebIntel, AggregatedSentiment
+from agent.config.settings import LLMConfig
+from agent.models.schemas import IndicatorResult, MarketData, AnalysisReport, WebIntel, AggregatedSentiment
 from agent.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from agent.searcher import WebSearcher
 from agent.sentiment import SentimentAnalyzer

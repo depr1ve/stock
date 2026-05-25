@@ -29,8 +29,8 @@ from rich.live import Live
 from rich import box
 
 from agent.orchestrator import StockAnalysisOrchestrator
-from data.fetcher import FetchError
-from models.schemas import StockRequest
+from agent.data.fetcher import FetchError
+from agent.models.schemas import StockRequest
 
 # ── 主题配色 ──────────────────────────────────────────────
 

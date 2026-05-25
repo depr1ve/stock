@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from models.schemas import StockRequest, MarketData, MarketRow
+from agent.models.schemas import StockRequest, MarketData, MarketRow
 
 logger = logging.getLogger(__name__)
 

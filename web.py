@@ -18,14 +18,14 @@ from plotly.subplots import make_subplots
 from datetime import date, timedelta
 from dotenv import load_dotenv
 
-from models.schemas import StockRequest
-from data.fetcher import DataFetcher, FetchError
-from indicators.calculator import IndicatorCalculator
+from agent.models.schemas import StockRequest
+from agent.data.fetcher import DataFetcher, FetchError
+from agent.indicators.calculator import IndicatorCalculator
 from agent.analyzer import LLMAnalyzer
 from agent.searcher import WebSearcher
 from agent.sentiment import SentimentAnalyzer
-from config.settings import Config, default_config
-from report.generator import ReportGenerator
+from agent.config.settings import Config, default_config
+from agent.report.generator import ReportGenerator
 
 # 优先级：环境变量 > st.secrets > 内置默认值
 load_dotenv()
@@ -359,7 +359,7 @@ def main():
         else:
             # 无 LLM 时生成纯数据报告
             gen = ReportGenerator()
-            from models.schemas import AnalysisReport
+            from agent.models.schemas import AnalysisReport
             dummy = AnalysisReport(
                 stock_code=data.stock_code, stock_name=data.stock_name,
                 days=data.count, trend="", volatility="", volume_price="",
